@@ -59,7 +59,7 @@
     const body = $('thought-body').value.trim();
     if (!thoughtDate || !title || !body) { showMessage('thought-message', 'Заполните дату, заголовок и текст мысли.'); return; }
     setBusy(button, true); showMessage('thought-message', publish ? 'Публикуем мысль…' : 'Сохраняем черновик…');
-    const { error } = await db.from('daily_thoughts').upsert({ author_id: user.id, thought_date: thoughtDate, title, body, is_published: publish }, { onConflict: 'author_id,thought_date' });
+    const { error } = await db.from('daily_thoughts').upsert({ author_id: user.id, thought_date: thoughtDate, title, body, is_published: publish }, { onConflict: 'thought_date' });
     setBusy(button, false);
     if (error) { showMessage('thought-message', 'Не удалось сохранить: ' + error.message); return; }
     showMessage('thought-message', publish ? 'Мысль опубликована для гостей тестовой гостиной.' : 'Черновик мысли сохранён только для автора.', true);
