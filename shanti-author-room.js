@@ -91,24 +91,32 @@
     showMessage('event-message', 'Закрытая заготовка события сохранена. Гости её не видят.', true);
   }
 
-  function reviewItem(kind, title, meta, body) {
-    return `<article class="item"><div class="meta">${escapeHtml(kind)} · ${escapeHtml(meta)}</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body || 'Описание пока не добавлено.').replace(/\n/g, '<br>')}</p></article>`;
+  function reviewItem(kind, title, meta, body, action = '') {
+    return `<article class="item"><div class="meta">${escapeHtml(kind)} · ${escapeHtml(meta)}</div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body || 'Описание пока не добавлено.').replace(/\n/g, '<br>')}</p>${action}</article>`;
+  }
+  async function publishEvent(id, button) {
+    if (!window.confirm('Открыть это событие для гостей тестовой гостиной? Закрытые заметки и другие события не изменятся.')) return;
+    setBusy(button, true);
+    const { error } = await db.from('author_event_drafts').update({ visibility: 'open' }).eq('id', id).eq('author_id', user.id).eq('visibility', 'closed');
+    if (error) { setBusy(button, false); window.alert('Не удалось опубликовать событие: ' + error.message); return; }
+    await loadReview();
   }
   async function loadReview() {
     const out = $('review-items'); out.innerHTML = '<div class="empty">Обновляем записи из тестовой базы…</div>';
     const [thoughts, notes, events] = await Promise.all([
       db.from('daily_thoughts').select('thought_date,title,body,is_published').eq('author_id', user.id).order('thought_date', { ascending: false }).limit(20),
       db.from('author_notes').select('note_date,title,body,visibility,created_at').eq('author_id', user.id).order('created_at', { ascending: false }).limit(20),
-      db.from('author_event_drafts').select('event_date,event_time,title,event_format,place_or_format,preparation_note,visibility,created_at').eq('author_id', user.id).order('created_at', { ascending: false }).limit(20)
+      db.from('author_event_drafts').select('id,event_date,event_time,title,event_format,place_or_format,preparation_note,visibility,created_at').eq('author_id', user.id).order('created_at', { ascending: false }).limit(20)
     ]);
     const errors = [thoughts.error, notes.error, events.error].filter(Boolean);
     if (errors.length) { out.innerHTML = `<div class="empty">Не удалось загрузить записи: ${escapeHtml(errors[0].message)}</div>`; return; }
     const items = [
       ...thoughts.data.map(x => reviewItem(x.is_published ? 'Мысль дня · опубликовано для гостей' : 'Мысль дня · черновик', x.title, x.thought_date, x.body)),
       ...notes.data.map(x => reviewItem('Личная заметка · закрыта', x.title, x.note_date, x.body)),
-      ...events.data.map(x => reviewItem('Заготовка события · закрыта', x.title, [x.event_date, x.event_time, x.event_format, x.place_or_format].filter(Boolean).join(' · '), x.preparation_note))
+      ...events.data.map(x => reviewItem(x.visibility === 'open' ? 'Событие · открыто гостям' : 'Заготовка события · закрыта', x.title, [x.event_date, x.event_time, x.event_format, x.place_or_format].filter(Boolean).join(' · '), x.preparation_note, x.visibility === 'closed' ? `<button class="button primary event-publish" type="button" data-event-id="${escapeHtml(x.id)}">Опубликовать для гостей</button>` : ''))
     ];
     out.innerHTML = items.length ? items.join('') : '<div class="empty">Пока нет сохранённых записей. Ничего не создано автоматически.</div>';
+    out.querySelectorAll('.event-publish').forEach(button => button.addEventListener('click', () => publishEvent(button.dataset.eventId, button)));
   }
   function bindTabs() {
     document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', async () => {
